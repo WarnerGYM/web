@@ -2,29 +2,34 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Gestión de Gimnasio con Firebase</title>
+  <title>Gestión de Gimnasio</title>
   <style>
-    body { background:#121212; color:#ffffff; font-family:Arial,sans-serif; margin:0; }
+    body { background:#121212; color:#eee; font-family:Arial,sans-serif; margin:0; }
     header { background:#1f1f1f; padding:1rem; text-align:center; font-size:1.5rem; }
     main { display:flex; }
     nav { width:200px; background:#1a1a1a; min-height:100vh; padding:1rem; }
-    nav button { display:block; width:100%; margin:.5rem 0; padding:.5rem; background:#333; border:none; color:#ffffff; cursor:pointer; border-radius:5px; }
+    nav button { display:block; width:100%; margin:.5rem 0; padding:.5rem; background:#333; border:none; color:#eee; cursor:pointer; border-radius:5px; }
     section { flex:1; padding:1rem; display:none; }
     section.active { display:block; }
     table { width:100%; border-collapse:collapse; margin-top:1rem; }
     th,td { border:1px solid #444; padding:.5rem; text-align:left; }
-    input,select { padding:.3rem; margin:.2rem 0; border-radius:4px; border:1px solid #444; background:#222; color:#ffffff; }
+    input,select { padding:.3rem; margin:.2rem 0; border-radius:4px; border:1px solid #444; background:#222; color:#eee; }
     .history-filters { margin:1rem 0; }
+    .export-btn, .import-btn { margin-top:1rem; padding:.5rem 1rem; border:none; border-radius:5px; cursor:pointer; }
+    .export-btn { background:#28a745; color:#fff; }
+    .import-btn { background:#007bff; color:#fff; }
   </style>
 </head>
 <body>
-  <header>🏋️ Sistema de Gimnasio (Firebase)</header>
+  <header>🏋️ Sistema de Gimnasio</header>
   <main>
     <nav>
       <button onclick="show('members')">Miembros</button>
       <button onclick="show('attendance')">Registro de Asistencia / Pagos del día</button>
       <button onclick="show('history')">Historial</button>
     </nav>
+
+    <!-- ====== SECCIÓN MIEMBROS ====== -->
     <section id="members" class="active">
       <h2>Miembros</h2>
       <form onsubmit="addMember(event)">
@@ -33,11 +38,17 @@
         <input id="memberAmount" type="number" placeholder="Pago $" required>
         <button>Registrar</button>
       </form>
+      <div class="history-filters">
+        <label>Filtrar por fecha inicio:</label>
+        <input type="date" id="filterMemberDate" onchange="renderMembers(this.value)">
+      </div>
       <table>
         <thead><tr><th>Nombre</th><th>Inicio</th><th>Fin</th><th>Pago</th><th>Acciones</th></tr></thead>
         <tbody id="membersTbody"></tbody>
       </table>
     </section>
+
+    <!-- ====== SECCIÓN ASISTENCIA ====== -->
     <section id="attendance">
       <h2>Registro de Visitas / Zumba</h2>
       <form onsubmit="addVisit(event)">
@@ -54,6 +65,8 @@
         <tbody id="visitsTbody"></tbody>
       </table>
     </section>
+
+    <!-- ====== SECCIÓN HISTORIAL ====== -->
     <section id="history">
       <h2>Historial</h2>
       <div class="history-filters">
@@ -65,16 +78,25 @@
           <option value="Zumba">Zumba</option>
           <option value="Asistencia">Asistencias</option>
         </select>
+        <label>Fecha:</label>
+        <input type="date" id="filterDate" onchange="renderHistory(this.value)">
       </div>
       <table>
         <thead><tr><th>Fecha</th><th>Tipo</th><th>Persona</th><th>Monto</th><th>Detalle</th></tr></thead>
         <tbody id="historyTbody"></tbody>
       </table>
       <p id="totalHistory">Ganancia total: $0</p>
+
+      <!-- Botones de Exportar/Importar/Limpiar -->
+      <button class="export-btn" onclick="exportHistory()">📤 Exportar Historial (CSV)</button>
+      <button class="export-btn" onclick="exportAll()">📤 Exportar TODO (JSON)</button>
+      <input type="file" id="importFile" accept=".json" style="display:none" onchange="importAll(event)">
+      <button class="import-btn" onclick="document.getElementById('importFile').click()">📥 Importar JSON</button>
+      <button class="import-btn" style="background:#dc3545;" onclick="clearAll()">🗑️ Limpiar todo</button>
     </section>
   </main>
 
-  <!-- ==== MODAL ==== -->
+  <!-- ====== MODAL DE ASISTENCIA ====== -->
   <div id="attendanceModal" style="
     position:fixed; top:0; left:0; width:100%; height:100%;
     background:rgba(0,0,0,0.7); display:none; align-items:center; justify-content:center;
@@ -86,142 +108,233 @@
     </div>
   </div>
 
-  <!-- ==== FIREBASE ==== -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getFirestore, collection, addDoc, getDocs, updateDoc, doc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+<script>
+const el=id=>document.getElementById(id);
+let members=[],visits=[],history=[];
 
-    const firebaseConfig = {
-       apiKey: "AIzaSyDWEWKwyx1hsUXt9VyHKYueB2Mb3XmxraY",
-       authDomain: "gimnasio-system.firebaseapp.com",
-       projectId: "gimnasio-system",
-       storageBucket: "gimnasio-system.firebasestorage.app",
-       messagingSenderId: "591457546318",
-       appId: "1:591457546318:web:7301e83f82f6455d96931f",
-       measurementId: "G-LLHCVVRYR3"
-    };
+// ==== GUARDAR Y CARGAR DATOS ====
+function saveData(){
+  localStorage.setItem("gymData", JSON.stringify({members,visits,history}));
+}
+function loadData(){
+  const data=localStorage.getItem("gymData");
+  if(data){
+    const obj=JSON.parse(data);
+    members=obj.members||[];
+    visits=obj.visits||[];
+    history=obj.history||[];
+  }
+}
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
+// ==== NAV ====
+function show(id){
+  document.querySelectorAll("section").forEach(s=>s.classList.remove("active"));
+  el(id).classList.add("active");
+}
 
-    const el=id=>document.getElementById(id);
-    const fmt=d=> new Date(d.seconds?d.seconds*1000:d).toLocaleString();
+// ==== UTIL ====
+function fmt(d){ return d.toLocaleString(); }
+function parseDate(s){ return s?new Date(s+"T00:00:00") : null; }
 
-    // ==== NAV ====
-    window.show=id=>{
-      document.querySelectorAll("section").forEach(s=>s.classList.remove("active"));
-      el(id).classList.add("active");
-    };
-
-    // ==== HISTORIAL ====
-    async function logHistory(type,person,amount,detail){
-      await addDoc(collection(db,"history"),{
-        date:serverTimestamp(),
-        type,person,amount,detail
+// ==== HISTORIAL ====
+function logHistory(type,person,amount,detail){
+  history.push({date:+new Date(),type,person,amount,detail});
+  saveData();
+  renderHistory();
+}
+function renderHistory(dateFilter=null){
+  let list=history;
+  const type=el("filterType").value;
+  if(type!=="all") list=list.filter(h=>h.type===type);
+  if(dateFilter){
+    const d=parseDate(dateFilter);
+    if(d){
+      const start=new Date(d); start.setHours(0,0,0,0);
+      const end=new Date(d); end.setHours(23,59,59,999);
+      list=list.filter(h=>{
+        const hd=new Date(h.date);
+        return hd>=start && hd<=end;
       });
     }
+  }
+  el("historyTbody").innerHTML=list.map(h=>`
+    <tr>
+      <td>${fmt(new Date(h.date))}</td>
+      <td>${h.type}</td>
+      <td>${h.person}</td>
+      <td>$${h.amount.toFixed(2)}</td>
+      <td>${h.detail||''}</td>
+    </tr>`).join('');
+  const total=list.reduce((s,h)=>s+h.amount,0);
+  el("totalHistory").textContent=`Ganancia total: $${total.toFixed(2)}`;
+}
 
-    function renderHistory(){
-      const type=el("filterType").value;
-      onSnapshot(collection(db,"history"),snap=>{
-        let list=snap.docs.map(d=>({id:d.id,...d.data()}));
-        if(type!=="all") list=list.filter(h=>h.type===type);
-        el("historyTbody").innerHTML=list.map(h=>`
-          <tr>
-            <td>${fmt(h.date)}</td>
-            <td>${h.type}</td>
-            <td>${h.person}</td>
-            <td>$${h.amount?.toFixed(2) || 0}</td>
-            <td>${h.detail||''}</td>
-          </tr>`).join('');
-        const total=list.reduce((s,h)=>s+(h.amount||0),0);
-        el("totalHistory").textContent=`Ganancia total: $${total.toFixed(2)}`;
-      });
+// ==== EXPORTAR HISTORIAL CSV ====
+function exportHistory(){
+  if(history.length===0){ alert("No hay datos para exportar."); return; }
+  let csv="Fecha,Tipo,Persona,Monto,Detalle\n";
+  history.forEach(h=>{
+    csv+=`"${fmt(new Date(h.date))}","${h.type}","${h.person}",${h.amount},"${h.detail||''}"\n`;
+  });
+  const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
+  const link=document.createElement("a");
+  link.href=URL.createObjectURL(blob);
+  link.download="historial_gimnasio.csv";
+  link.click();
+}
+
+// ==== EXPORTAR TODO JSON ====
+function exportAll(){
+  const data = {members,visits,history};
+  const blob = new Blob([JSON.stringify(data,null,2)], {type:"application/json"});
+  const link=document.createElement("a");
+  link.href=URL.createObjectURL(blob);
+  link.download="datos_gimnasio.json";
+  link.click();
+}
+
+// ==== IMPORTAR TODO JSON ====
+function importAll(event){
+  const file=event.target.files[0];
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try {
+      const obj=JSON.parse(e.target.result);
+      members=obj.members||[];
+      visits=obj.visits||[];
+      history=obj.history||[];
+      saveData();
+      renderMembers();
+      renderVisits();
+      renderHistory();
+      alert("✅ Datos importados correctamente.");
+    } catch(err){
+      alert("❌ Archivo inválido.");
     }
+  };
+  reader.readAsText(file);
+}
 
-    // ==== MIEMBROS ====
-    window.addMember=async e=>{
-      e.preventDefault();
-      const name=el("memberName").value;
-      const days=+el("memberDays").value;
-      const amount=+el("memberAmount").value;
-      const start=new Date();
-      const end=new Date(start); end.setDate(end.getDate()+days);
+// ==== LIMPIAR TODO CON RESPALDO ====
+function clearAll(){
+  if(confirm("⚠️ Esto eliminará todos los miembros, visitas e historial. ¿Deseas crear un respaldo antes?")){
+    // Respaldo automático
+    const data = {members, visits, history};
+    const blob = new Blob([JSON.stringify(data,null,2)], {type:"application/json"});
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `respaldo_gimnasio_${new Date().toISOString()}.json`;
+    link.click();
 
-      await addDoc(collection(db,"members"),{
-        name,days,amount,start,end
-      });
-      await logHistory("Membresía",name,amount,`Membresía de ${days} días`);
-      e.target.reset();
-    };
-
-    function renderMembers(){
-      onSnapshot(collection(db,"members"),snap=>{
-        const list=snap.docs.map(d=>({id:d.id,...d.data()}));
-        el("membersTbody").innerHTML=list.map(m=>`
-          <tr>
-            <td>${m.name}</td>
-            <td>${fmt(m.start)}</td>
-            <td>${fmt(m.end)}</td>
-            <td>$${m.amount.toFixed(2)}</td>
-            <td>
-              <button onclick="renewMember('${m.id}','${m.name}','${m.end.toDate()}')">Renovar</button>
-              <button onclick="markAttendance('${m.name}','${m.end.toDate()}')">Asistencia</button>
-            </td>
-          </tr>`).join('');
-      });
-    }
-
-    window.renewMember=async (id,name,endDate)=>{
-      const extra=prompt("¿Cuántos días renovar?");
-      const pay=prompt("Pago recibido $");
-      if(extra&&pay){
-        const newEnd=new Date(endDate);
-        newEnd.setDate(newEnd.getDate()+(+extra));
-        await updateDoc(doc(db,"members",id),{ end:newEnd });
-        await logHistory("Membresía",name,+pay,`Renovación de ${extra} días`);
-      }
-    };
-
-    // ==== VISITAS / ZUMBA ====
-    window.addVisit=async e=>{
-      e.preventDefault();
-      const name=el("visitName").value;
-      const amount=+el("visitAmount").value;
-      const type=el("visitType").value;
-      await addDoc(collection(db,"visits"),{name,amount,type,date:serverTimestamp()});
-      await logHistory(type,name,amount,"Pago por "+type);
-      e.target.reset();
-    };
-
-    function renderVisits(){
-      onSnapshot(collection(db,"visits"),snap=>{
-        const list=snap.docs.map(d=>({id:d.id,...d.data()}));
-        el("visitsTbody").innerHTML=list.map(v=>`
-          <tr>
-            <td>${v.name}</td>
-            <td>${v.type}</td>
-            <td>$${v.amount.toFixed(2)}</td>
-            <td>${fmt(v.date)}</td>
-          </tr>`).join('');
-      });
-    }
-
-    // ==== ASISTENCIA ====
-    window.markAttendance=async (name,endDate)=>{
-      const today=new Date();
-      const diff=Math.ceil((new Date(endDate)-today)/(1000*60*60*24));
-      await logHistory("Asistencia",name,0,"Registro de asistencia");
-      el("modalTitle").textContent=`👋 Bienvenido ${name}`;
-      el("modalMessage").textContent=`Te quedan ${diff} días de membresía.`;
-      el("attendanceModal").style.display="flex";
-    };
-    window.closeModal=()=> el("attendanceModal").style.display="none";
-
-    // ==== INIT ====
+    // Limpiar datos
+    members = [];
+    visits = [];
+    history = [];
+    saveData();
     renderMembers();
     renderVisits();
     renderHistory();
-  </script>
+    alert("✅ Todos los datos fueron eliminados y se creó un respaldo automático.");
+  }
+}
+
+// ==== MIEMBROS ====
+function addMember(e){
+  e.preventDefault();
+  const name=el("memberName").value;
+  const days=+el("memberDays").value;
+  const amount=+el("memberAmount").value;
+  const start=new Date(); start.setHours(0,0,0,0);
+  const end=new Date(start); end.setDate(end.getDate()+days);
+  const m={id:Date.now(),name,days,amount,start:+start,end:+end};
+  members.push(m);
+  logHistory("Membresía",name,amount,`Membresía de ${days} días`);
+  saveData();
+  renderMembers();
+  e.target.reset();
+}
+function renderMembers(dateFilter=null){
+  let list=members;
+  if(dateFilter){
+    const d=parseDate(dateFilter);
+    if(d){
+      const start=new Date(d); start.setHours(0,0,0,0);
+      const end=new Date(d); end.setHours(23,59,59,999);
+      list=list.filter(m=>{
+        const md=new Date(m.start);
+        return md>=start && md<=end;
+      });
+    }
+  }
+  el("membersTbody").innerHTML=list.map(m=>`
+    <tr>
+      <td>${m.name}</td>
+      <td>${fmt(new Date(m.start))}</td>
+      <td>${fmt(new Date(m.end))}</td>
+      <td>$${m.amount.toFixed(2)}</td>
+      <td>
+        <button onclick="renewMember('${m.id}')">Renovar</button>
+        <button onclick="markAttendance('${m.id}')">Asistencia</button>
+      </td>
+    </tr>`).join('');
+}
+function renewMember(id){
+  const m=members.find(x=>x.id==id);
+  if(!m) return;
+  const extra=prompt("¿Cuántos días desea renovar?");
+  const pay=prompt("Pago recibido por renovación $");
+  if(extra&&pay){
+    const addDays=+extra, amount=+pay;
+    m.end=new Date(m.end).setDate(new Date(m.end).getDate()+addDays);
+    logHistory("Membresía",m.name,amount,`Renovación de ${addDays} días`);
+    saveData();
+    renderMembers();
+  }
+}
+
+// ==== VISITAS / ZUMBA ====
+function addVisit(e){
+  e.preventDefault();
+  const name=el("visitName").value;
+  const amount=+el("visitAmount").value;
+  const type=el("visitType").value;
+  visits.push({id:Date.now(),name,amount,type,date:+new Date()});
+  logHistory(type,name,amount,"Pago por "+type);
+  saveData();
+  renderVisits();
+  e.target.reset();
+}
+function renderVisits(){
+  el("visitsTbody").innerHTML=visits.map(v=>`
+    <tr>
+      <td>${v.name}</td>
+      <td>${v.type}</td>
+      <td>$${v.amount.toFixed(2)}</td>
+      <td>${fmt(new Date(v.date))}</td>
+    </tr>`).join('');
+}
+
+// ==== ASISTENCIA ====
+window.markAttendance=id=>{
+  const m=members.find(x=>x.id==id);
+  if(!m) return;
+  const today=new Date(); today.setHours(0,0,0,0);
+  const end=new Date(m.end);
+  const diff=Math.ceil((end-today)/(1000*60*60*24));
+  logHistory("Asistencia",m.name,0,"Registro de asistencia");
+  saveData();
+  el("modalTitle").textContent=`👋 Bienvenido ${m.name}`;
+  el("modalMessage").textContent=`Te quedan ${diff} días de membresía.`;
+  el("attendanceModal").style.display="flex";
+};
+function closeModal(){ el("attendanceModal").style.display="none"; }
+
+// ==== INIT ====
+loadData();
+renderMembers();
+renderVisits();
+renderHistory();
+</script>
 </body>
 </html>
