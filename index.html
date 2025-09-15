@@ -40,10 +40,26 @@
       </form>
       <div class="history-filters">
         <label>Filtrar por fecha inicio:</label>
-        <input type="date" id="filterMemberDate" onchange="renderMembers(this.value)">
+        <input type="date" id="filterMemberDate" onchange="renderMembers(el('filterMemberDate').value)">
+        <label>Filtrar por días restantes:</label>
+        <select id="filterRemainingDays" onchange="renderMembers(el('filterMemberDate').value)">
+          <option value="all">Todos</option>
+          <option value="30">30 días o menos</option>
+          <option value="15">Menos de 15 días</option>
+          <option value="5">Menos de 5 días</option>
+        </select>
       </div>
       <table>
-        <thead><tr><th>Nombre</th><th>Inicio</th><th>Fin</th><th>Pago</th><th>Acciones</th></tr></thead>
+        <thead>
+          <tr>
+            <th>Nombre</th>
+            <th>Inicio</th>
+            <th>Fin</th>
+            <th>Días restantes</th>
+            <th>Pago</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
         <tbody id="membersTbody"></tbody>
       </table>
     </section>
@@ -113,9 +129,7 @@ const el=id=>document.getElementById(id);
 let members=[],visits=[],history=[];
 
 // ==== GUARDAR Y CARGAR DATOS ====
-function saveData(){
-  localStorage.setItem("gymData", JSON.stringify({members,visits,history}));
-}
+function saveData(){ localStorage.setItem("gymData", JSON.stringify({members,visits,history})); }
 function loadData(){
   const data=localStorage.getItem("gymData");
   if(data){
@@ -127,21 +141,14 @@ function loadData(){
 }
 
 // ==== NAV ====
-function show(id){
-  document.querySelectorAll("section").forEach(s=>s.classList.remove("active"));
-  el(id).classList.add("active");
-}
+function show(id){ document.querySelectorAll("section").forEach(s=>s.classList.remove("active")); el(id).classList.add("active"); }
 
 // ==== UTIL ====
 function fmt(d){ return d.toLocaleString(); }
 function parseDate(s){ return s?new Date(s+"T00:00:00") : null; }
 
 // ==== HISTORIAL ====
-function logHistory(type,person,amount,detail){
-  history.push({date:+new Date(),type,person,amount,detail});
-  saveData();
-  renderHistory();
-}
+function logHistory(type,person,amount,detail){ history.push({date:+new Date(),type,person,amount,detail}); saveData(); renderHistory(); }
 function renderHistory(dateFilter=null){
   let list=history;
   const type=el("filterType").value;
@@ -151,10 +158,7 @@ function renderHistory(dateFilter=null){
     if(d){
       const start=new Date(d); start.setHours(0,0,0,0);
       const end=new Date(d); end.setHours(23,59,59,999);
-      list=list.filter(h=>{
-        const hd=new Date(h.date);
-        return hd>=start && hd<=end;
-      });
+      list=list.filter(h=>{ const hd=new Date(h.date); return hd>=start && hd<=end; });
     }
   }
   el("historyTbody").innerHTML=list.map(h=>`
@@ -173,45 +177,28 @@ function renderHistory(dateFilter=null){
 function exportHistory(){
   if(history.length===0){ alert("No hay datos para exportar."); return; }
   let csv="Fecha,Tipo,Persona,Monto,Detalle\n";
-  history.forEach(h=>{
-    csv+=`"${fmt(new Date(h.date))}","${h.type}","${h.person}",${h.amount},"${h.detail||''}"\n`;
-  });
-  const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
-  const link=document.createElement("a");
-  link.href=URL.createObjectURL(blob);
-  link.download="historial_gimnasio.csv";
-  link.click();
+  history.forEach(h=>{ csv+=`"${fmt(new Date(h.date))}","${h.type}","${h.person}",${h.amount},"${h.detail||''}"\n`; });
+  const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"}), link=document.createElement("a");
+  link.href=URL.createObjectURL(blob); link.download="historial_gimnasio.csv"; link.click();
 }
 
 // ==== EXPORTAR TODO JSON ====
 function exportAll(){
-  const data = {members,visits,history};
-  const blob = new Blob([JSON.stringify(data,null,2)], {type:"application/json"});
-  const link=document.createElement("a");
-  link.href=URL.createObjectURL(blob);
-  link.download="datos_gimnasio.json";
-  link.click();
+  const blob = new Blob([JSON.stringify({members,visits,history},null,2)], {type:"application/json"});
+  const link=document.createElement("a"); link.href=URL.createObjectURL(blob); link.download="datos_gimnasio.json"; link.click();
 }
 
 // ==== IMPORTAR TODO JSON ====
 function importAll(event){
-  const file=event.target.files[0];
-  if(!file) return;
+  const file=event.target.files[0]; if(!file) return;
   const reader=new FileReader();
   reader.onload=e=>{
     try {
       const obj=JSON.parse(e.target.result);
-      members=obj.members||[];
-      visits=obj.visits||[];
-      history=obj.history||[];
-      saveData();
-      renderMembers();
-      renderVisits();
-      renderHistory();
+      members=obj.members||[]; visits=obj.visits||[]; history=obj.history||[];
+      saveData(); renderMembers(); renderVisits(); renderHistory();
       alert("✅ Datos importados correctamente.");
-    } catch(err){
-      alert("❌ Archivo inválido.");
-    }
+    } catch(err){ alert("❌ Archivo inválido."); }
   };
   reader.readAsText(file);
 }
@@ -219,22 +206,11 @@ function importAll(event){
 // ==== LIMPIAR TODO CON RESPALDO ====
 function clearAll(){
   if(confirm("⚠️ Esto eliminará todos los miembros, visitas e historial. ¿Deseas crear un respaldo antes?")){
-    // Respaldo automático
-    const data = {members, visits, history};
-    const blob = new Blob([JSON.stringify(data,null,2)], {type:"application/json"});
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `respaldo_gimnasio_${new Date().toISOString()}.json`;
-    link.click();
-
-    // Limpiar datos
-    members = [];
-    visits = [];
-    history = [];
-    saveData();
-    renderMembers();
-    renderVisits();
-    renderHistory();
+    const blob = new Blob([JSON.stringify({members, visits, history},null,2)], {type:"application/json"});
+    const link = document.createElement("a"); link.href = URL.createObjectURL(blob);
+    link.download = `respaldo_gimnasio_${new Date().toISOString()}.json`; link.click();
+    members = []; visits = []; history = [];
+    saveData(); renderMembers(); renderVisits(); renderHistory();
     alert("✅ Todos los datos fueron eliminados y se creó un respaldo automático.");
   }
 }
@@ -250,10 +226,9 @@ function addMember(e){
   const m={id:Date.now(),name,days,amount,start:+start,end:+end};
   members.push(m);
   logHistory("Membresía",name,amount,`Membresía de ${days} días`);
-  saveData();
-  renderMembers();
-  e.target.reset();
+  saveData(); renderMembers(); e.target.reset();
 }
+
 function renderMembers(dateFilter=null){
   let list=members;
   if(dateFilter){
@@ -261,35 +236,45 @@ function renderMembers(dateFilter=null){
     if(d){
       const start=new Date(d); start.setHours(0,0,0,0);
       const end=new Date(d); end.setHours(23,59,59,999);
-      list=list.filter(m=>{
-        const md=new Date(m.start);
-        return md>=start && md<=end;
-      });
+      list=list.filter(m=>{ const md=new Date(m.start); return md>=start && md<=end; });
     }
   }
-  el("membersTbody").innerHTML=list.map(m=>`
-    <tr>
+
+  // Filtro días restantes según select
+  const remainingOption = el("filterRemainingDays").value;
+  const today = new Date(); today.setHours(0,0,0,0);
+  if(remainingOption !== "all"){
+    const limit = +remainingOption;
+    list = list.filter(m => Math.ceil((new Date(m.end)-today)/(1000*60*60*24)) <= limit);
+  }
+
+  el("membersTbody").innerHTML=list.map(m=>{
+    const remainingDays = Math.ceil((new Date(m.end)-today)/(1000*60*60*24));
+    let bgColor="";
+    if(remainingDays<3) bgColor="#ffcccc";       // rojo claro
+    else if(remainingDays<=7) bgColor="#fff3cc"; // amarillo claro
+    return `<tr style="background:${bgColor}">
       <td>${m.name}</td>
       <td>${fmt(new Date(m.start))}</td>
       <td>${fmt(new Date(m.end))}</td>
+      <td>${remainingDays}</td> <!-- nueva columna -->
       <td>$${m.amount.toFixed(2)}</td>
       <td>
         <button onclick="renewMember('${m.id}')">Renovar</button>
         <button onclick="markAttendance('${m.id}')">Asistencia</button>
       </td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
 }
+
 function renewMember(id){
-  const m=members.find(x=>x.id==id);
-  if(!m) return;
-  const extra=prompt("¿Cuántos días desea renovar?");
-  const pay=prompt("Pago recibido por renovación $");
+  const m=members.find(x=>x.id==id); if(!m) return;
+  const extra=prompt("¿Cuántos días desea renovar?"), pay=prompt("Pago recibido por renovación $");
   if(extra&&pay){
     const addDays=+extra, amount=+pay;
     m.end=new Date(m.end).setDate(new Date(m.end).getDate()+addDays);
     logHistory("Membresía",m.name,amount,`Renovación de ${addDays} días`);
-    saveData();
-    renderMembers();
+    saveData(); renderMembers();
   }
 }
 
@@ -301,10 +286,9 @@ function addVisit(e){
   const type=el("visitType").value;
   visits.push({id:Date.now(),name,amount,type,date:+new Date()});
   logHistory(type,name,amount,"Pago por "+type);
-  saveData();
-  renderVisits();
-  e.target.reset();
+  saveData(); renderVisits(); e.target.reset();
 }
+
 function renderVisits(){
   el("visitsTbody").innerHTML=visits.map(v=>`
     <tr>
@@ -317,8 +301,7 @@ function renderVisits(){
 
 // ==== ASISTENCIA ====
 window.markAttendance=id=>{
-  const m=members.find(x=>x.id==id);
-  if(!m) return;
+  const m=members.find(x=>x.id==id); if(!m) return;
   const today=new Date(); today.setHours(0,0,0,0);
   const end=new Date(m.end);
   const diff=Math.ceil((end-today)/(1000*60*60*24));
