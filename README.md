@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <title>Gestión de Gimnasio</title>
   <style>
-    body { background:#121212; color:#eee; font-family:Arial,sans-serif; margin:0; }
+    body { background:#121212; color:#bd9a00; font-family:Arial,sans-serif; margin:0; }
     header { background:#1f1f1f; padding:1rem; text-align:center; font-size:1.5rem; }
     main { display:flex; }
     nav { width:200px; background:#1a1a1a; min-height:100vh; padding:1rem; }
