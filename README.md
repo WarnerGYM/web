@@ -8,12 +8,12 @@
     header { background:#1f1f1f; padding:1rem; text-align:center; font-size:1.5rem; }
     main { display:flex; }
     nav { width:200px; background:#1a1a1a; min-height:100vh; padding:1rem; }
-    nav button { display:block; width:100%; margin:.5rem 0; padding:.5rem; background:#333; border:none; color:#eee; cursor:pointer; border-radius:5px; }
+    nav button { display:block; width:100%; margin:.5rem 0; padding:.5rem; background:#333; border:none; color:#121212; cursor:pointer; border-radius:5px; }
     section { flex:1; padding:1rem; display:none; }
     section.active { display:block; }
     table { width:100%; border-collapse:collapse; margin-top:1rem; }
     th,td { border:1px solid #444; padding:.5rem; text-align:left; }
-    input,select { padding:.3rem; margin:.2rem 0; border-radius:4px; border:1px solid #444; background:#222; color:#eee; }
+    input,select { padding:.3rem; margin:.2rem 0; border-radius:4px; border:1px solid #444; background:#222; color:#121212; }
     .history-filters { margin:1rem 0; }
   </style>
 </head>
