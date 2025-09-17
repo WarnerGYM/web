@@ -36,6 +36,9 @@
         <input id="memberName" placeholder="Nombre" required>
         <input id="memberDays" type="number" placeholder="Días" required>
         <input id="memberAmount" type="number" placeholder="Pago $" required>
+        <!-- Nuevo campo: fecha inicio -->
+        <label for="memberStart">Fecha inicio:</label>
+        <input id="memberStart" type="date">
         <button>Registrar</button>
       </form>
       <div class="history-filters">
@@ -148,7 +151,6 @@ function fmt(d){ return d.toLocaleString(); }
 function parseDate(s){ return s?new Date(s+"T00:00:00") : null; }
 
 // ==== HISTORIAL ====
-function logHistory(type,person,amount,detail){ history.push({date:+new Date(),type,person,amount,detail}); saveData(); renderHistory(); }
 function renderHistory(dateFilter=null){
   let list=history;
   const type=el("filterType").value;
@@ -221,12 +223,30 @@ function addMember(e){
   const name=el("memberName").value;
   const days=+el("memberDays").value;
   const amount=+el("memberAmount").value;
-  const start=new Date(); start.setHours(0,0,0,0);
+  
+  // Si se define manualmente, usar la fecha; si no, usar hoy
+  let start;
+  if(el("memberStart").value){
+    start = new Date(el("memberStart").value+"T00:00:00");
+  } else {
+    start = new Date();
+  }
+  start.setHours(0,0,0,0);
+  
   const end=new Date(start); end.setDate(end.getDate()+days);
   const m={id:Date.now(),name,days,amount,start:+start,end:+end};
   members.push(m);
-  logHistory("Membresía",name,amount,`Membresía de ${days} días`);
-  saveData(); renderMembers(); e.target.reset();
+  
+  // Historial con fecha de inicio
+  history.push({
+    date:+start,
+    type:"Membresía",
+    person:name,
+    amount:amount,
+    detail:`Membresía de ${days} días`
+  });
+
+  saveData(); renderMembers(); renderHistory(); e.target.reset();
 }
 
 function renderMembers(dateFilter=null){
@@ -257,7 +277,7 @@ function renderMembers(dateFilter=null){
       <td>${m.name}</td>
       <td>${fmt(new Date(m.start))}</td>
       <td>${fmt(new Date(m.end))}</td>
-      <td>${remainingDays}</td> <!-- nueva columna -->
+      <td>${remainingDays}</td>
       <td>$${m.amount.toFixed(2)}</td>
       <td>
         <button onclick="renewMember('${m.id}')">Renovar</button>
@@ -272,9 +292,20 @@ function renewMember(id){
   const extra=prompt("¿Cuántos días desea renovar?"), pay=prompt("Pago recibido por renovación $");
   if(extra&&pay){
     const addDays=+extra, amount=+pay;
-    m.end=new Date(m.end).setDate(new Date(m.end).getDate()+addDays);
-    logHistory("Membresía",m.name,amount,`Renovación de ${addDays} días`);
-    saveData(); renderMembers();
+    const oldEnd = new Date(m.end);
+    m.end=new Date(m.end).setDate(oldEnd.getDate()+addDays);
+    
+    // Historial con fecha de inicio de la renovación
+    const renewalStart = new Date(oldEnd);
+    history.push({
+      date:+renewalStart,
+      type:"Membresía",
+      person:m.name,
+      amount:amount,
+      detail:`Renovación de ${addDays} días`
+    });
+
+    saveData(); renderMembers(); renderHistory();
   }
 }
 
@@ -285,8 +316,8 @@ function addVisit(e){
   const amount=+el("visitAmount").value;
   const type=el("visitType").value;
   visits.push({id:Date.now(),name,amount,type,date:+new Date()});
-  logHistory(type,name,amount,"Pago por "+type);
-  saveData(); renderVisits(); e.target.reset();
+  history.push({date:+new Date(),type,person:name,amount,detail:"Pago por "+type});
+  saveData(); renderVisits(); renderHistory(); e.target.reset();
 }
 
 function renderVisits(){
@@ -305,7 +336,7 @@ window.markAttendance=id=>{
   const today=new Date(); today.setHours(0,0,0,0);
   const end=new Date(m.end);
   const diff=Math.ceil((end-today)/(1000*60*60*24));
-  logHistory("Asistencia",m.name,0,"Registro de asistencia");
+  history.push({date:+new Date(),type:"Asistencia",person:m.name,amount:0,detail:"Registro de asistencia"});
   saveData();
   el("modalTitle").textContent=`👋 Bienvenido ${m.name}`;
   el("modalMessage").textContent=`Te quedan ${diff} días de membresía.`;
