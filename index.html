@@ -36,12 +36,13 @@
         <input id="memberName" placeholder="Nombre" required>
         <input id="memberDays" type="number" placeholder="Días" required>
         <input id="memberAmount" type="number" placeholder="Pago $" required>
-        <!-- Nuevo campo: fecha inicio -->
         <label for="memberStart">Fecha inicio:</label>
         <input id="memberStart" type="date">
         <button>Registrar</button>
       </form>
       <div class="history-filters">
+        <label>Buscar por nombre:</label>
+        <input id="filterMemberName" placeholder="Nombre..." oninput="renderMembers(el('filterMemberDate').value)">
         <label>Filtrar por fecha inicio:</label>
         <input type="date" id="filterMemberDate" onchange="renderMembers(el('filterMemberDate').value)">
         <label>Filtrar por días restantes:</label>
@@ -106,7 +107,6 @@
       </table>
       <p id="totalHistory">Ganancia total: $0</p>
 
-      <!-- Botones de Exportar/Importar/Limpiar -->
       <button class="export-btn" onclick="exportHistory()">📤 Exportar Historial (CSV)</button>
       <button class="export-btn" onclick="exportAll()">📤 Exportar TODO (JSON)</button>
       <input type="file" id="importFile" accept=".json" style="display:none" onchange="importAll(event)">
@@ -131,7 +131,6 @@
 const el=id=>document.getElementById(id);
 let members=[],visits=[],history=[];
 
-// ==== GUARDAR Y CARGAR DATOS ====
 function saveData(){ localStorage.setItem("gymData", JSON.stringify({members,visits,history})); }
 function loadData(){
   const data=localStorage.getItem("gymData");
@@ -143,14 +142,10 @@ function loadData(){
   }
 }
 
-// ==== NAV ====
 function show(id){ document.querySelectorAll("section").forEach(s=>s.classList.remove("active")); el(id).classList.add("active"); }
-
-// ==== UTIL ====
 function fmt(d){ return d.toLocaleString(); }
 function parseDate(s){ return s?new Date(s+"T00:00:00") : null; }
 
-// ==== HISTORIAL ====
 function renderHistory(dateFilter=null){
   let list=history;
   const type=el("filterType").value;
@@ -175,7 +170,6 @@ function renderHistory(dateFilter=null){
   el("totalHistory").textContent=`Ganancia total: $${total.toFixed(2)}`;
 }
 
-// ==== EXPORTAR HISTORIAL CSV ====
 function exportHistory(){
   if(history.length===0){ alert("No hay datos para exportar."); return; }
   let csv="Fecha,Tipo,Persona,Monto,Detalle\n";
@@ -184,13 +178,11 @@ function exportHistory(){
   link.href=URL.createObjectURL(blob); link.download="historial_gimnasio.csv"; link.click();
 }
 
-// ==== EXPORTAR TODO JSON ====
 function exportAll(){
   const blob = new Blob([JSON.stringify({members,visits,history},null,2)], {type:"application/json"});
   const link=document.createElement("a"); link.href=URL.createObjectURL(blob); link.download="datos_gimnasio.json"; link.click();
 }
 
-// ==== IMPORTAR TODO JSON ====
 function importAll(event){
   const file=event.target.files[0]; if(!file) return;
   const reader=new FileReader();
@@ -205,7 +197,6 @@ function importAll(event){
   reader.readAsText(file);
 }
 
-// ==== LIMPIAR TODO CON RESPALDO ====
 function clearAll(){
   if(confirm("⚠️ Esto eliminará todos los miembros, visitas e historial. ¿Deseas crear un respaldo antes?")){
     const blob = new Blob([JSON.stringify({members, visits, history},null,2)], {type:"application/json"});
@@ -217,40 +208,23 @@ function clearAll(){
   }
 }
 
-// ==== MIEMBROS ====
 function addMember(e){
   e.preventDefault();
   const name=el("memberName").value;
   const days=+el("memberDays").value;
   const amount=+el("memberAmount").value;
-  
-  // Si se define manualmente, usar la fecha; si no, usar hoy
-  let start;
-  if(el("memberStart").value){
-    start = new Date(el("memberStart").value+"T00:00:00");
-  } else {
-    start = new Date();
-  }
+  let start = el("memberStart").value ? new Date(el("memberStart").value+"T00:00:00") : new Date();
   start.setHours(0,0,0,0);
-  
   const end=new Date(start); end.setDate(end.getDate()+days);
   const m={id:Date.now(),name,days,amount,start:+start,end:+end};
   members.push(m);
-  
-  // Historial con fecha de inicio
-  history.push({
-    date:+start,
-    type:"Membresía",
-    person:name,
-    amount:amount,
-    detail:`Membresía de ${days} días`
-  });
-
+  history.push({date:+start,type:"Membresía",person:name,amount:amount,detail:`Membresía de ${days} días`});
   saveData(); renderMembers(); renderHistory(); e.target.reset();
 }
 
 function renderMembers(dateFilter=null){
   let list=members;
+
   if(dateFilter){
     const d=parseDate(dateFilter);
     if(d){
@@ -259,6 +233,10 @@ function renderMembers(dateFilter=null){
       list=list.filter(m=>{ const md=new Date(m.start); return md>=start && md<=end; });
     }
   }
+
+  // Filtro por nombre
+  const nameFilter = el("filterMemberName").value.toLowerCase();
+  if(nameFilter) list = list.filter(m=>m.name.toLowerCase().includes(nameFilter));
 
   // Filtro días restantes según select
   const remainingOption = el("filterRemainingDays").value;
@@ -271,8 +249,8 @@ function renderMembers(dateFilter=null){
   el("membersTbody").innerHTML=list.map(m=>{
     const remainingDays = Math.ceil((new Date(m.end)-today)/(1000*60*60*24));
     let bgColor="";
-    if(remainingDays<3) bgColor="#ffcccc";       // rojo claro
-    else if(remainingDays<=7) bgColor="#fff3cc"; // amarillo claro
+    if(remainingDays<3) bgColor="#ffcccc";
+    else if(remainingDays<=7) bgColor="#fff3cc";
     return `<tr style="background:${bgColor}">
       <td>${m.name}</td>
       <td>${fmt(new Date(m.start))}</td>
@@ -294,22 +272,12 @@ function renewMember(id){
     const addDays=+extra, amount=+pay;
     const oldEnd = new Date(m.end);
     m.end=new Date(m.end).setDate(oldEnd.getDate()+addDays);
-    
-    // Historial con fecha de inicio de la renovación
     const renewalStart = new Date(oldEnd);
-    history.push({
-      date:+renewalStart,
-      type:"Membresía",
-      person:m.name,
-      amount:amount,
-      detail:`Renovación de ${addDays} días`
-    });
-
+    history.push({date:+renewalStart,type:"Membresía",person:m.name,amount:amount,detail:`Renovación de ${addDays} días`});
     saveData(); renderMembers(); renderHistory();
   }
 }
 
-// ==== VISITAS / ZUMBA ====
 function addVisit(e){
   e.preventDefault();
   const name=el("visitName").value;
@@ -330,7 +298,6 @@ function renderVisits(){
     </tr>`).join('');
 }
 
-// ==== ASISTENCIA ====
 window.markAttendance=id=>{
   const m=members.find(x=>x.id==id); if(!m) return;
   const today=new Date(); today.setHours(0,0,0,0);
@@ -344,7 +311,6 @@ window.markAttendance=id=>{
 };
 function closeModal(){ el("attendanceModal").style.display="none"; }
 
-// ==== INIT ====
 loadData();
 renderMembers();
 renderVisits();
